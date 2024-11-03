@@ -2,10 +2,12 @@ pub mod address_type;
 pub mod command;
 pub mod method;
 pub mod reply;
+pub mod request;
 
 use std::net::{Ipv4Addr, Ipv6Addr, SocketAddr, SocketAddrV4, SocketAddrV6};
 
 use reply::Reply;
+use request::Request;
 use tokio::io::{self, AsyncReadExt, AsyncWriteExt};
 
 use crate::{address::Address, error::Error, SocksHandler};
@@ -65,7 +67,7 @@ impl<H: SocksHandler + Send + Sync> Socks5<H> {
 
     pub async fn accept<S>(&mut self, stream: &mut S) -> Result<(), H::Error>
     where
-        S: AsyncReadExt + AsyncWriteExt + Unpin,
+        S: AsyncReadExt + AsyncWriteExt + Unpin + Send,
     {
         match self.handshake(stream).await {
             Ok(_) => Ok(()),
@@ -78,7 +80,7 @@ impl<H: SocksHandler + Send + Sync> Socks5<H> {
 
     pub async fn handshake<S>(&mut self, stream: &mut S) -> Result<(), H::Error>
     where
-        S: AsyncReadExt + AsyncWriteExt + Unpin,
+        S: AsyncReadExt + AsyncWriteExt + Unpin + Send,
     {
         let method = match self.handshake_method(stream).await {
             Ok(val) => {
@@ -106,7 +108,8 @@ impl<H: SocksHandler + Send + Sync> Socks5<H> {
         let (command, address) = match self.handshake_request(stream).await {
             Ok(val) => val,
             Err(err) => {
-                self.handshake_request_reply(stream, err.reply).await?;
+                self.handshake_request_reply(stream, err.reply, self.local_addr)
+                    .await?;
                 return Err(err.err.into());
             }
         };
@@ -401,38 +404,39 @@ impl<H: SocksHandler + Send + Sync> Socks5<H> {
     ///        o  BND.ADDR       server bound address
     ///        o  BND.PORT       server bound port in network octet order
     /// Fields marked RESERVED (RSV) must be set to X'00'.
-    async fn handshake_request_reply<S>(&self, stream: &mut S, reply: Reply) -> Result<(), H::Error>
+    async fn handshake_request_reply<S>(
+        &self,
+        stream: &mut S,
+        reply: Reply,
+        bind_addr: SocketAddr,
+    ) -> Result<(), H::Error>
     where
-        S: AsyncReadExt + AsyncWriteExt + Unpin,
+        S: AsyncReadExt + AsyncWriteExt + Unpin + Send,
     {
-        let (address_type, ip, port) = match self.local_addr {
-            SocketAddr::V4(addr) => (AddressType::IPV4, addr.ip().octets().to_vec(), addr.port()),
-            SocketAddr::V6(addr) => (AddressType::IPV6, addr.ip().octets().to_vec(), addr.port()),
-        };
-
-        let mut buf = vec![Self::VERSION, reply.into(), 0x00, address_type.into()];
-        buf.extend(ip);
-        buf.extend(port.to_le_bytes());
-
-        stream.write_all(&buf).await?;
+        let mut request = Request::new(stream);
+        request.reply(reply, bind_addr).await?;
 
         Ok(())
     }
 
-    pub async fn connect<S>(&self, stream: &mut S, address: &Address) -> Result<(), H::Error>
+    pub async fn connect<S>(&self, stream: &mut S, target_addr: &Address) -> Result<(), H::Error>
     where
-        S: AsyncReadExt + AsyncWriteExt + Unpin,
+        S: AsyncReadExt + AsyncWriteExt + Unpin + Send,
     {
-        let mut socks_stream = match self.handler.socks5_command_connect(&address).await {
+        let (mut socks_stream, bind_addr) = match self
+            .handler
+            .socks5_command_connect(&target_addr)
+            .await
+        {
             Ok(val) => val,
             Err(err) => {
-                self.handshake_request_reply(stream, Reply::NetworkUnreachable)
+                self.handshake_request_reply(stream, Reply::NetworkUnreachable, self.local_addr)
                     .await?;
                 return Err(err);
             }
         };
 
-        self.handshake_request_reply(stream, Reply::Succeeded)
+        self.handshake_request_reply(stream, Reply::Succeeded, bind_addr)
             .await?;
 
         io::copy_bidirectional(stream, &mut socks_stream).await?;
@@ -440,22 +444,26 @@ impl<H: SocksHandler + Send + Sync> Socks5<H> {
         Ok(())
     }
 
-    async fn bind<S>(&self, stream: &mut S, address: &Address) -> Result<(), H::Error>
+    async fn bind<S>(&self, stream: &mut S, bind_addr: &Address) -> Result<(), H::Error>
     where
-        S: AsyncReadExt + AsyncWriteExt + Unpin,
+        S: AsyncReadExt + AsyncWriteExt + Unpin + Send,
     {
-        match self.handler.socks5_command_bind(&address).await {
+        let mut request = Request::new(stream);
+
+        match self
+            .handler
+            .socks5_command_bind(&mut request, bind_addr)
+            .await
+        {
             Ok(val) => val,
             Err(err) => {
-                self.handshake_request_reply(stream, Reply::HostUnreachable)
+                request
+                    .reply(Reply::HostUnreachable, self.local_addr)
                     .await?;
 
                 return Err(err);
             }
         };
-
-        self.handshake_request_reply(stream, Reply::Succeeded)
-            .await?;
 
         Ok(())
     }

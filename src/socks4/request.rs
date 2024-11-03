@@ -1,0 +1,30 @@
+use std::net::SocketAddr;
+
+use tokio::io::{self, AsyncReadExt, AsyncWriteExt};
+
+use super::reply::Reply;
+
+pub struct Request<S> {
+    pub stream: S,
+}
+
+impl<S: AsyncReadExt + AsyncWriteExt + Unpin + Send> Request<S> {
+    pub fn new(stream: S) -> Self {
+        Self { stream }
+    }
+
+    pub async fn reply(&mut self, reply: Reply, bind_addr: SocketAddr) -> Result<(), io::Error> {
+        let (ip, port) = match bind_addr {
+            SocketAddr::V4(addr) => (addr.ip().octets().to_vec(), addr.port()),
+            SocketAddr::V6(addr) => (addr.ip().octets().to_vec(), addr.port()),
+        };
+
+        let mut buf = vec![0x00, reply.into()];
+        buf.extend(ip);
+        buf.extend(port.to_be_bytes());
+
+        self.stream.write_all(&buf).await?;
+
+        Ok(())
+    }
+}

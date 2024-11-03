@@ -1,8 +1,10 @@
 pub mod command;
 pub mod reply;
+pub mod request;
 
 use std::net::{Ipv4Addr, SocketAddr, SocketAddrV4};
 
+use request::Request;
 use tokio::io::{self, AsyncReadExt, AsyncWriteExt};
 
 use crate::{address::Address, error::Error, SocksHandler};
@@ -30,7 +32,7 @@ impl<H: SocksHandler + Send + Sync> Socks4<H> {
     }
     pub async fn accept<S>(&mut self, stream: &mut S) -> Result<(), H::Error>
     where
-        S: AsyncReadExt + AsyncWriteExt + Unpin,
+        S: AsyncReadExt + AsyncWriteExt + Unpin + Send,
     {
         match self.handshake(stream).await {
             Ok(_) => Ok(()),
@@ -42,12 +44,12 @@ impl<H: SocksHandler + Send + Sync> Socks4<H> {
     }
     pub async fn handshake<S>(&mut self, stream: &mut S) -> Result<(), H::Error>
     where
-        S: AsyncReadExt + AsyncWriteExt + Unpin,
+        S: AsyncReadExt + AsyncWriteExt + Unpin + Send,
     {
         let (command, address, user_id) = match self.handshake_request(stream).await {
             Ok(val) => val,
             Err(err) => {
-                self.handshake_request_reply(stream, Reply::Rejected)
+                self.handshake_request_reply(stream, Reply::Rejected, self.local_addr)
                     .await?;
 
                 return Err(err);
@@ -57,7 +59,7 @@ impl<H: SocksHandler + Send + Sync> Socks4<H> {
         let is_success = match self.handler.socks4_auth(&user_id, &self.peer_addr).await {
             Ok(val) => val,
             Err(err) => {
-                self.handshake_request_reply(stream, Reply::Rejected)
+                self.handshake_request_reply(stream, Reply::Rejected, self.local_addr)
                     .await?;
 
                 return Err(err);
@@ -65,7 +67,7 @@ impl<H: SocksHandler + Send + Sync> Socks4<H> {
         };
 
         if !is_success {
-            self.handshake_request_reply(stream, Reply::Rejected)
+            self.handshake_request_reply(stream, Reply::Rejected, self.local_addr)
                 .await?;
 
             return Err(Error::AuthenticationFailed.into());
@@ -136,63 +138,61 @@ impl<H: SocksHandler + Send + Sync> Socks4<H> {
     /// 91: request rejected or failed
     /// 92: request rejected becasue SOCKS server cannot connect to identd on the client
     /// 93: request rejected because the client program and identd report different user-ids
-    async fn handshake_request_reply<S>(&self, stream: &mut S, reply: Reply) -> Result<(), H::Error>
+    async fn handshake_request_reply<S>(
+        &self,
+        stream: &mut S,
+        reply: Reply,
+        bind_addr: SocketAddr,
+    ) -> Result<(), H::Error>
     where
-        S: AsyncReadExt + AsyncWriteExt + Unpin,
+        S: AsyncReadExt + AsyncWriteExt + Unpin + Send,
     {
-        let (ip, port) = match self.peer_addr {
-            SocketAddr::V4(addr) => (addr.ip().octets().to_vec(), addr.port()),
-            SocketAddr::V6(addr) => (addr.ip().octets().to_vec(), addr.port()),
-        };
-
-        let mut buf = vec![0x00, reply.into()];
-        buf.extend(ip);
-        buf.extend(port.to_le_bytes());
-
-        stream.write_all(&buf).await?;
-
-        if reply != Reply::Granted {
-            stream.shutdown().await?;
-        }
+        let mut request = Request::new(stream);
+        request.reply(reply, bind_addr).await?;
 
         Ok(())
     }
 
     async fn connect<S>(&self, stream: &mut S, address: Address) -> Result<(), H::Error>
     where
-        S: AsyncReadExt + AsyncWriteExt + Unpin,
+        S: AsyncReadExt + AsyncWriteExt + Unpin + Send,
     {
-        let mut socks_stream = match self.handler.socks4_command_connect(&address).await {
-            Ok(val) => val,
-            Err(err) => {
-                self.handshake_request_reply(stream, Reply::Rejected)
-                    .await?;
+        let (mut socks_stream, bind_addr) =
+            match self.handler.socks4_command_connect(&address).await {
+                Ok(val) => val,
+                Err(err) => {
+                    self.handshake_request_reply(stream, Reply::Rejected, self.local_addr)
+                        .await?;
 
-                return Err(err);
-            }
-        };
+                    return Err(err);
+                }
+            };
 
-        self.handshake_request_reply(stream, Reply::Granted).await?;
+        self.handshake_request_reply(stream, Reply::Granted, bind_addr)
+            .await?;
         io::copy_bidirectional(stream, &mut socks_stream).await?;
 
         Ok(())
     }
 
-    async fn bind<S>(&self, stream: &mut S, address: Address) -> Result<(), H::Error>
+    async fn bind<S>(&self, stream: &mut S, bind_addr: Address) -> Result<(), H::Error>
     where
-        S: AsyncReadExt + AsyncWriteExt + Unpin,
+        S: AsyncReadExt + AsyncWriteExt + Unpin + Send,
     {
-        match self.handler.socks4_command_bind(&address).await {
+        let mut request = Request::new(stream);
+
+        match self
+            .handler
+            .socks4_command_bind(&mut request, &bind_addr)
+            .await
+        {
             Ok(val) => val,
             Err(err) => {
-                self.handshake_request_reply(stream, Reply::Rejected)
-                    .await?;
+                request.reply(Reply::Rejected, self.local_addr).await?;
 
                 return Err(err);
             }
         };
-
-        self.handshake_request_reply(stream, Reply::Granted).await?;
 
         Ok(())
     }

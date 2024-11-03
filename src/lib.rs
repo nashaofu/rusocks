@@ -17,7 +17,7 @@ use socks5::{method::Method, Socks5};
 #[async_trait]
 pub trait SocksHandler: Sized + Send {
     type Error: From<Error> + From<io::Error> + Send + fmt::Debug;
-    type Stream: AsyncReadExt + AsyncWriteExt + Unpin;
+    type Stream: AsyncReadExt + AsyncWriteExt + Unpin + Send;
 
     #[allow(unused_variables)]
     async fn socks4_handshake_command(
@@ -47,7 +47,7 @@ pub trait SocksHandler: Sized + Send {
         username: String,
         password: String,
     ) -> Result<bool, Self::Error> {
-        Ok(true)
+        Ok(false)
     }
 
     #[allow(unused_variables)]
@@ -72,10 +72,45 @@ pub trait SocksHandler: Sized + Send {
         Ok(true)
     }
 
-    async fn socks4_command_connect(&self, address: &Address) -> Result<Self::Stream, Self::Error>;
-    async fn socks4_command_bind(&self, address: &Address) -> Result<(), Self::Error>;
-    async fn socks5_command_connect(&self, address: &Address) -> Result<Self::Stream, Self::Error>;
-    async fn socks5_command_bind(&self, address: &Address) -> Result<(), Self::Error>;
+    #[allow(unused_variables)]
+    async fn socks4_command_connect(
+        &self,
+        address: &Address,
+    ) -> Result<(Self::Stream, SocketAddr), Self::Error> {
+        Err(Error::InternalError.into())
+    }
+
+    #[allow(unused_variables)]
+    async fn socks4_command_bind<S>(
+        &self,
+        request: &mut socks4::request::Request<S>,
+        bind_addr: &Address,
+    ) -> Result<(), Self::Error>
+    where
+        S: AsyncReadExt + AsyncWriteExt + Unpin + Send,
+    {
+        Err(Error::InternalError.into())
+    }
+
+    #[allow(unused_variables)]
+    async fn socks5_command_connect(
+        &self,
+        address: &Address,
+    ) -> Result<(Self::Stream, SocketAddr), Self::Error> {
+        Err(Error::InternalError.into())
+    }
+
+    #[allow(unused_variables)]
+    async fn socks5_command_bind<S>(
+        &self,
+        request: &mut socks5::request::Request<S>,
+        bind_addr: &Address,
+    ) -> Result<(), Self::Error>
+    where
+        S: AsyncReadExt + AsyncWriteExt + Unpin + Send,
+    {
+        Err(Error::InternalError.into())
+    }
 }
 
 pub enum Socks<H: SocksHandler + Send + Sync> {
@@ -98,17 +133,20 @@ impl<H: SocksHandler + Send + Sync> Socks<H> {
         match version {
             0x04 => Ok(Socks::V4(Socks4::new(peer_addr, local_addr, handler))),
             0x05 => Ok(Socks::V5(Socks5::new(peer_addr, local_addr, handler))),
-            v => Err(Error::UnsupportedVersion(v).into()),
+            v => {
+                stream.shutdown().await?;
+                Err(Error::UnsupportedVersion(v).into())
+            }
         }
     }
 
     pub async fn accept<S>(&mut self, stream: &mut S) -> Result<(), H::Error>
     where
-        S: AsyncReadExt + AsyncWriteExt + Unpin,
+        S: AsyncReadExt + AsyncWriteExt + Unpin + Send,
     {
         match self {
-            Socks::V5(socks5) => socks5.accept(stream).await,
             Socks::V4(socks4) => socks4.accept(stream).await,
+            Socks::V5(socks5) => socks5.accept(stream).await,
         }
     }
 }
