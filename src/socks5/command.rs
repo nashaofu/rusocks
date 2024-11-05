@@ -4,13 +4,13 @@ use crate::error::Error;
 /// BIND X'02'
 /// UDP ASSOCIATE X'03'
 #[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
-pub enum Command {
+pub enum Socks5Command {
     Connect = 0x01,
     Bind = 0x02,
     Associate = 0x03,
 }
 
-impl TryFrom<u8> for Command {
+impl TryFrom<u8> for Socks5Command {
     type Error = Error;
     fn try_from(value: u8) -> Result<Self, Self::Error> {
         match value {
@@ -22,7 +22,7 @@ impl TryFrom<u8> for Command {
     }
 }
 
-impl Into<u8> for Command {
+impl Into<u8> for Socks5Command {
     fn into(self) -> u8 {
         match self {
             Self::Connect => 0x01,

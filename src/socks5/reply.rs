@@ -10,7 +10,7 @@
 /// X'09' to X'FF' unassigned
 #[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
 #[repr(u8)]
-pub enum Reply {
+pub enum Socks5Reply {
     Succeeded = 0x00,
     Failure = 0x01,
     NotAllowed = 0x02,
@@ -19,11 +19,11 @@ pub enum Reply {
     ConnectionRefused = 0x05,
     TTLExpired = 0x06,
     UnsupportedCommand = 0x07,
-    UnsupportedAddress = 0x08,
+    UnsupportedAddressType = 0x08,
     Unassigned(u8),
 }
 
-impl From<u8> for Reply {
+impl From<u8> for Socks5Reply {
     fn from(value: u8) -> Self {
         match value {
             0x00 => Self::Succeeded,
@@ -34,13 +34,13 @@ impl From<u8> for Reply {
             0x05 => Self::ConnectionRefused,
             0x06 => Self::TTLExpired,
             0x07 => Self::UnsupportedCommand,
-            0x08 => Self::UnsupportedAddress,
+            0x08 => Self::UnsupportedAddressType,
             val => Self::Unassigned(val),
         }
     }
 }
 
-impl Into<u8> for Reply {
+impl Into<u8> for Socks5Reply {
     fn into(self) -> u8 {
         match self {
             Self::Succeeded => 0x00,
@@ -51,7 +51,7 @@ impl Into<u8> for Reply {
             Self::ConnectionRefused => 0x05,
             Self::TTLExpired => 0x06,
             Self::UnsupportedCommand => 0x07,
-            Self::UnsupportedAddress => 0x08,
+            Self::UnsupportedAddressType => 0x08,
             Self::Unassigned(val) => val,
         }
     }

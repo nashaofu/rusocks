@@ -6,7 +6,7 @@
 /// 0xFF NO ACCEPTABLE METHODS
 #[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
 #[repr(u8)]
-pub enum Method {
+pub enum Socks5Method {
     None = 0x00,
     GssApi = 0x01,
     UserPass = 0x02,
@@ -15,7 +15,7 @@ pub enum Method {
     Unacceptable = 0xff,
 }
 
-impl From<u8> for Method {
+impl From<u8> for Socks5Method {
     fn from(value: u8) -> Self {
         match value {
             0x00 => Self::None,
@@ -28,7 +28,7 @@ impl From<u8> for Method {
     }
 }
 
-impl Into<u8> for Method {
+impl Into<u8> for Socks5Method {
     fn into(self) -> u8 {
         match self {
             Self::None => 0x00,

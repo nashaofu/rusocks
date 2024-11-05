@@ -8,7 +8,7 @@ keywords = ["socks", "socks4", "socks4a", "socks5", "server"]
 
 [dependencies]
 async-trait = "0.1.83"
-thiserror = "1.0.66"
+thiserror = "1.0.68"
 tokio = { version = "1.41.0", features = ["io-util"] }
 
 [dev-dependencies]

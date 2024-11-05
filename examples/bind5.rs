@@ -24,11 +24,10 @@ async fn socks5_bind_client(
 
     // 4. 发送 BIND 请求
     let mut request = vec![0x05, 0x02, 0x00, 0x01]; // SOCKS5, BIND command, reserved, address type (domain)
-    // request.push(4); // 地址长度
+                                                    // request.push(4); // 地址长度
     request.extend_from_slice(&bind_addr.ip().octets()); // 地址本身
     let s = &bind_addr.port().to_be_bytes();
     request.extend(&s.to_vec()); // 端口
-
 
     println!("bind addr {}", bind_addr);
 
@@ -66,7 +65,6 @@ async fn socks5_bind_client(
     let mut s = TcpStream::connect("127.0.0.1:8080").await?;
 
     io::copy_bidirectional(&mut s, &mut stream).await?;
-
 
     Ok(())
 }

@@ -3,12 +3,12 @@ use crate::error::Error;
 /// CONNECT X'01'
 /// BIND X'02'
 #[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
-pub enum Command {
+pub enum Socks4Command {
     Connect = 0x01,
     Bind = 0x02,
 }
 
-impl TryFrom<u8> for Command {
+impl TryFrom<u8> for Socks4Command {
     type Error = Error;
     fn try_from(value: u8) -> Result<Self, Self::Error> {
         match value {
@@ -19,7 +19,7 @@ impl TryFrom<u8> for Command {
     }
 }
 
-impl Into<u8> for Command {
+impl Into<u8> for Socks4Command {
     fn into(self) -> u8 {
         match self {
             Self::Connect => 0x01,
