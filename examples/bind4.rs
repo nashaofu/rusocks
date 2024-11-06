@@ -27,7 +27,7 @@ where
 async fn main() -> io::Result<()> {
     let server_addr = "127.0.0.1:1080";
     let target_ip = [127, 0, 0, 1];
-    let target_port = 8081;
+    let target_port = 0;
 
     // send_socks4_bind_request(server_addr, target_port, target_ip).await?;
 

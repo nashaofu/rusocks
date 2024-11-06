@@ -48,7 +48,6 @@ pub trait Socks4Handler {
 #[derive(Clone, Debug)]
 pub struct Socks4<H: Socks4Handler + Send + Sync> {
     peer_addr: SocketAddr,
-    #[allow(dead_code)]
     local_addr: SocketAddr,
     handler: H,
 }
@@ -142,7 +141,7 @@ impl<H: Socks4Handler + Send + Sync> Socks4<H> {
 
         let ip = Ipv4Addr::new(buf[0], buf[1], buf[2], buf[3]);
 
-        let address = Address::IPV4(SocketAddrV4::new(ip, port));
+        let ipv4_address = Address::IPV4(SocketAddrV4::new(ip, port));
 
         let mut buf = Vec::new();
         loop {
@@ -155,6 +154,27 @@ impl<H: Socks4Handler + Send + Sync> Socks4<H> {
         }
 
         let user_id = String::from_utf8(buf).map_err(Error::Utf8BytesToStringError)?;
+
+        // socks4a 协议，如果ip地址是0.0.0.x的形式，则需要读取域名信息。注意x必须非0
+        // https://www.openssh.com/txt/socks4a.protocol
+        let ip_bytes = ip.octets();
+        let address =
+            if ip_bytes[0] == 0 && ip_bytes[1] == 0 && ip_bytes[2] == 0 && ip_bytes[3] != 0 {
+                let mut buf = Vec::new();
+                loop {
+                    let val = stream.read_u8().await?;
+                    if val == 0x00 {
+                        break;
+                    } else {
+                        buf.push(val);
+                    }
+                }
+
+                let domain = String::from_utf8(buf).map_err(Error::Utf8BytesToStringError)?;
+                Address::Domain(domain, port)
+            } else {
+                ipv4_address
+            };
 
         Ok((command, address, user_id))
     }

@@ -164,7 +164,7 @@ impl<H: Socks5Handler + Send + Sync> Socks5<H> {
         match command {
             Socks5Command::Connect => self.connect(stream, &address).await?,
             Socks5Command::Bind => self.bind(stream, &address).await?,
-            _ => todo!(),
+            Socks5Command::Associate => unimplemented!(),
         };
 
         Ok(())

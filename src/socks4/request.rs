@@ -24,8 +24,8 @@ impl<S: AsyncReadExt + AsyncWriteExt + Unpin + Send> Socks4Request<S> {
         };
 
         let mut buf = vec![0x00, reply.into()];
-        buf.extend(ip);
         buf.extend(port.to_be_bytes());
+        buf.extend(ip);
 
         self.stream.write_all(&buf).await?;
 
