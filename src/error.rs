@@ -27,6 +27,6 @@ pub enum SocksError {
     #[error("Converting a UTF-8 bytes to string error. {0}")]
     Utf8BytesToStringError(#[from] std::string::FromUtf8Error),
 
-    #[error("Internal error")]
-    InternalError,
+    #[error("Execute error {0}")]
+    ExecuteError(String),
 }

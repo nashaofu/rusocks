@@ -1,6 +1,6 @@
 [package]
 name = "rusocks"
-version = "0.0.6"
+version = "0.0.7"
 edition = "2021"
 description = "A socks4(a)/5 server"
 license = "Apache-2.0"

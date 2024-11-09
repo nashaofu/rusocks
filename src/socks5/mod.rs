@@ -12,7 +12,7 @@ use async_trait::async_trait;
 use reply::Socks5Reply;
 use tokio::{
     io::{self, AsyncReadExt, AsyncWriteExt},
-    net::{TcpListener, TcpStream, UdpSocket},
+    net::{TcpListener, TcpStream},
 };
 
 use crate::{addr::SocksAddr, error::SocksError};
@@ -23,7 +23,7 @@ use method::Socks5Method;
 
 #[async_trait]
 pub trait Socks5Handler {
-    type Error: From<SocksError> + Into<SocksError> + From<io::Error> + Error;
+    type Error: From<SocksError> + From<io::Error> + Error;
 
     async fn negotiate_method(
         &self,
@@ -78,85 +78,89 @@ pub trait Socks5Handler {
         Ok(())
     }
 
+    #[allow(unused_variables)]
     async fn associate(
         &self,
         stream: &mut TcpStream,
         dest_addr: &SocksAddr,
     ) -> Result<(), Self::Error> {
-        let udp_socket = UdpSocket::bind((dest_addr.domain(), dest_addr.port())).await?;
-        let bind_addr = udp_socket.local_addr()?.clone();
-        Socks5Reply::Succeeded.reply(stream, bind_addr).await?;
+        // let udp_socket = UdpSocket::bind((dest_addr.domain(), dest_addr.port())).await?;
+        // let bind_addr = udp_socket.local_addr()?.clone();
+        // Socks5Reply::Succeeded.reply(stream, bind_addr).await?;
 
-        loop {
-            // +----+------+------+----------+----------+----------+
-            // |RSV | FRAG | ATYP | DST.ADDR | DST.PORT |   DATA   |
-            // +----+------+------+----------+----------+----------+
-            // | 2  |  1   |  1   | Variable |    2     | Variable |
-            // +----+------+------+----------+----------+----------+
-            //     The fields in the UDP request header are:
+        // loop {
+        //     // +----+------+------+----------+----------+----------+
+        //     // |RSV | FRAG | ATYP | DST.ADDR | DST.PORT |   DATA   |
+        //     // +----+------+------+----------+----------+----------+
+        //     // | 2  |  1   |  1   | Variable |    2     | Variable |
+        //     // +----+------+------+----------+----------+----------+
+        //     //     The fields in the UDP request header are:
 
-            //   o  RSV  Reserved X'0000'
-            //   o  FRAG    Current fragment number
-            //   o  ATYP    address type of following addresses:
-            //      o  IP V4 address: X'01'
-            //      o  DOMAINNAME: X'03'
-            //      o  IP V6 address: X'04'
-            //   o  DST.ADDR       desired destination address
-            //   o  DST.PORT       desired destination port
-            //   o  DATA     user data
+        //     //   o  RSV  Reserved X'0000'
+        //     //   o  FRAG    Current fragment number
+        //     //   o  ATYP    address type of following addresses:
+        //     //      o  IP V4 address: X'01'
+        //     //      o  DOMAINNAME: X'03'
+        //     //      o  IP V6 address: X'04'
+        //     //   o  DST.ADDR       desired destination address
+        //     //   o  DST.PORT       desired destination port
+        //     //   o  DATA     user data
 
-            let mut buf = vec![0u8; 65535];
-            if let Ok((size, peer_addr)) = udp_socket.recv_from(&mut buf).await {
-                if buf[0] != 0 || buf[1] != 0 {
-                    continue;
-                }
+        //     let mut buf = vec![0u8; 65535];
+        //     if let Ok((size, peer_addr)) = udp_socket.recv_from(&mut buf).await {
+        //         if buf[0] != 0 || buf[1] != 0 {
+        //             continue;
+        //         }
 
-                let addr_type: Socks5AddrType = buf[3].try_into()?;
+        //         let addr_type: Socks5AddrType = buf[3].try_into()?;
 
-                let dist_addr = match addr_type {
-                    Socks5AddrType::IPV4 => {
-                        let mut buf = [0; 4];
-                        stream.read_exact(&mut buf).await?;
+        //         let (dist_addr, offset) = match addr_type {
+        //             Socks5AddrType::IPV4 => {
+        //                 let mut buf = [0; 4];
+        //                 stream.read_exact(&mut buf).await?;
 
-                        let ip = Ipv4Addr::new(buf[0], buf[1], buf[2], buf[3]);
-                        let port = stream.read_u16().await?;
+        //                 let ip = Ipv4Addr::new(buf[0], buf[1], buf[2], buf[3]);
+        //                 let port = stream.read_u16().await?;
 
-                        SocksAddr::IPV4(SocketAddrV4::new(ip, port))
-                    }
-                    Socks5AddrType::Domain => {
-                        let length = stream.read_u8().await?;
-                        let mut buf = vec![0; length as usize];
-                        stream.read_exact(&mut buf).await?;
+        //                 (SocksAddr::IPV4(SocketAddrV4::new(ip, port)), 3 + 4)
+        //             }
+        //             Socks5AddrType::Domain => {
+        //                 let length = stream.read_u8().await?;
+        //                 let mut buf = vec![0; length as usize];
+        //                 stream.read_exact(&mut buf).await?;
 
-                        let domain =
-                            String::from_utf8(buf).map_err(SocksError::Utf8BytesToStringError)?;
-                        let port = stream.read_u16().await?;
+        //                 let domain =
+        //                     String::from_utf8(buf).map_err(SocksError::Utf8BytesToStringError)?;
+        //                 let port = stream.read_u16().await?;
 
-                        SocksAddr::Domain(domain, port)
-                    }
-                    Socks5AddrType::IPV6 => {
-                        let mut buf = [0; 16];
-                        stream.read_exact(&mut buf).await?;
+        //                 (SocksAddr::Domain(domain, port), 3 + length)
+        //             }
+        //             Socks5AddrType::IPV6 => {
+        //                 let mut buf = [0; 16];
+        //                 stream.read_exact(&mut buf).await?;
 
-                        let ip = Ipv6Addr::new(
-                            u16::from_be_bytes([buf[0], buf[1]]),
-                            u16::from_be_bytes([buf[2], buf[3]]),
-                            u16::from_be_bytes([buf[4], buf[5]]),
-                            u16::from_be_bytes([buf[6], buf[7]]),
-                            u16::from_be_bytes([buf[8], buf[9]]),
-                            u16::from_be_bytes([buf[10], buf[11]]),
-                            u16::from_be_bytes([buf[12], buf[13]]),
-                            u16::from_be_bytes([buf[14], buf[15]]),
-                        );
-                        let port = stream.read_u16().await?;
+        //                 let ip = Ipv6Addr::new(
+        //                     u16::from_be_bytes([buf[0], buf[1]]),
+        //                     u16::from_be_bytes([buf[2], buf[3]]),
+        //                     u16::from_be_bytes([buf[4], buf[5]]),
+        //                     u16::from_be_bytes([buf[6], buf[7]]),
+        //                     u16::from_be_bytes([buf[8], buf[9]]),
+        //                     u16::from_be_bytes([buf[10], buf[11]]),
+        //                     u16::from_be_bytes([buf[12], buf[13]]),
+        //                     u16::from_be_bytes([buf[14], buf[15]]),
+        //                 );
+        //                 let port = stream.read_u16().await?;
 
-                        SocksAddr::IPV6(SocketAddrV6::new(ip, port, 0, 0))
-                    }
-                };
-            }
-        }
+        //                 (SocksAddr::IPV6(SocketAddrV6::new(ip, port, 0, 0)), 3 + 16)
+        //             }
+        //         };
+        //         let data = &buf[offset as usize..size];
+        //         udp_socket.send_to(buf, dist_addr).await.unwrap();
+        //     }
+        // }
 
-        Ok(())
+        // Ok(())
+        unimplemented!()
     }
 }
 
@@ -214,7 +218,7 @@ impl<H: Socks5Handler + Send + Sync> Socks5<H> {
             Ok(_) => Ok(()),
             Err(err) => {
                 stream.shutdown().await?;
-                Err(err.into())
+                Err(SocksError::ExecuteError(err.to_string()))
             }
         }
     }
@@ -421,10 +425,12 @@ impl<H: Socks5Handler + Send + Sync> Socks5<H> {
 
         let command: Socks5Command = stream.read_u8().await?.try_into()?;
 
-        let is_support_command =
-            self.handler.allow_command(&command).await.map_err(|_| {
-                HandshakeError::new(SocksError::InternalError, Socks5Reply::Failure)
-            })?;
+        let is_support_command = self.handler.allow_command(&command).await.map_err(|err| {
+            HandshakeError::new(
+                SocksError::ExecuteError(err.to_string()),
+                Socks5Reply::Failure,
+            )
+        })?;
 
         if !is_support_command {
             return Err(HandshakeError::new(
@@ -436,11 +442,16 @@ impl<H: Socks5Handler + Send + Sync> Socks5<H> {
         stream.read_u8().await?;
         let addr_type: Socks5AddrType = stream.read_u8().await?.try_into()?;
 
-        let is_support_addr_type = self
-            .handler
-            .allow_addr_type(&addr_type)
-            .await
-            .map_err(|_| HandshakeError::new(SocksError::InternalError, Socks5Reply::Failure))?;
+        let is_support_addr_type =
+            self.handler
+                .allow_addr_type(&addr_type)
+                .await
+                .map_err(|err| {
+                    HandshakeError::new(
+                        SocksError::ExecuteError(err.to_string()),
+                        Socks5Reply::Failure,
+                    )
+                })?;
 
         if !is_support_addr_type {
             return Err(HandshakeError::new(

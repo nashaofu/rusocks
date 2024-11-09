@@ -19,7 +19,7 @@ use reply::Socks4Reply;
 
 #[async_trait]
 pub trait Socks4Handler {
-    type Error: From<SocksError> + Into<SocksError> + From<io::Error> + Error;
+    type Error: From<SocksError> + From<io::Error> + Error;
 
     #[allow(unused_variables)]
     async fn allow_command(&self, command: &Socks4Command) -> Result<bool, Self::Error> {
@@ -80,7 +80,7 @@ impl<H: Socks4Handler + Send + Sync> Socks4<H> {
             Ok(_) => Ok(()),
             Err(err) => {
                 stream.shutdown().await?;
-                Err(err.into())
+                Err(SocksError::ExecuteError(err.to_string()))
             }
         }
     }
