@@ -2,7 +2,7 @@
 
 ## features:
 
-- socks4 protocol
+- socks4/4a protocol
 
   - [x] connect
   - [x] bind
@@ -16,4 +16,4 @@
 
   - [x] connect
   - [x] bind
-  - [] udp associate
+  - [ ] udp associate
