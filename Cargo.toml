@@ -2,7 +2,7 @@
 name = "rusocks"
 version = "0.0.5"
 edition = "2021"
-description = "a socks4(a)/5 server"
+description = "A socks4(a)/5 server"
 license = "Apache-2.0"
 keywords = ["socks", "socks4", "socks4a", "socks5", "server"]
 
