@@ -1,4 +1,4 @@
-use crate::error::Error;
+use crate::error::SocksError;
 
 /// CONNECT X'01'
 /// BIND X'02'
@@ -11,13 +11,13 @@ pub enum Socks5Command {
 }
 
 impl TryFrom<u8> for Socks5Command {
-    type Error = Error;
+    type Error = SocksError;
     fn try_from(value: u8) -> Result<Self, Self::Error> {
         match value {
             0x01 => Ok(Self::Connect),
             0x02 => Ok(Self::Bind),
             0x03 => Ok(Self::Associate),
-            val => Err(Error::InvalidCommand(val)),
+            val => Err(SocksError::InvalidCommand(val)),
         }
     }
 }

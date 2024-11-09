@@ -1,6 +1,6 @@
 [package]
 name = "rusocks"
-version = "0.0.5"
+version = "0.0.6"
 edition = "2021"
 description = "A socks4(a)/5 server"
 license = "Apache-2.0"
@@ -9,7 +9,7 @@ keywords = ["socks", "socks4", "socks4a", "socks5", "server"]
 [dependencies]
 async-trait = "0.1.83"
 thiserror = "2.0.1"
-tokio = { version = "1.41.1", features = ["io-util"] }
+tokio = { version = "1.41.1", features = ["net", "io-util"] }
 
 [dev-dependencies]
 futures = "0.3.31"

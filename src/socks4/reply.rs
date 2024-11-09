@@ -1,3 +1,7 @@
+use std::net::SocketAddr;
+
+use tokio::io::{self, AsyncReadExt, AsyncWriteExt};
+
 /// 90: request granted
 /// 91: request rejected or failed
 /// 92: request rejected becasue SOCKS server cannot connect to identd on the client
@@ -30,5 +34,37 @@ impl Into<u8> for Socks4Reply {
             Self::RejectedByCannotConnectIdentd => 0x5c,
             Self::RejectedByIdentdReportDifferentUserIds => 0x5f,
         }
+    }
+}
+
+impl Socks4Reply {
+    /// +----+----+----+----+----+----+----+----+
+    /// | VN | CD | DSTPORT |      DSTIP        |
+    /// +----+----+----+----+----+----+----+----+
+    ///   1    1      2              4
+    ///
+    /// VN is the version of the reply code and should be 0. CD is the result
+    /// code with one of the following values:
+    ///
+    /// 90: request granted
+    /// 91: request rejected or failed
+    /// 92: request rejected becasue SOCKS server cannot connect to identd on the client
+    /// 93: request rejected because the client program and identd report different user-ids
+    pub async fn reply<S>(&mut self, stream: &mut S, bind_addr: SocketAddr) -> Result<(), io::Error>
+    where
+        S: AsyncReadExt + AsyncWriteExt + Unpin + Send,
+    {
+        let (ip, port) = match bind_addr {
+            SocketAddr::V4(addr) => (addr.ip().octets().to_vec(), addr.port()),
+            SocketAddr::V6(addr) => (addr.ip().octets().to_vec(), addr.port()),
+        };
+
+        let mut buf = vec![0x00, (*self).into()];
+        buf.extend(port.to_be_bytes());
+        buf.extend(ip);
+
+        stream.write_all(&buf).await?;
+
+        Ok(())
     }
 }
