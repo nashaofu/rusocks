@@ -1,13 +1,13 @@
 use std::net::{SocketAddrV4, SocketAddrV6};
 
 #[derive(Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
-pub enum Address {
+pub enum SocksAddr {
     IPV4(SocketAddrV4),
     Domain(String, u16),
     IPV6(SocketAddrV6),
 }
 
-impl Address {
+impl SocksAddr {
     pub fn domain(&self) -> String {
         match self {
             Self::IPV4(addr) => addr.ip().to_string(),
